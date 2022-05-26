@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "file:///home/seventh/Git/Divers/Python/Échangeur/échangeur.schema.json",
+  "title": "Format de stockage des niveaux",
+  "$defs": {
+    "bloc": {
+      "description": "Zone géographique infranchissable",
+      "type": "object",
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/rectangle"
+        },
+        "rôle": {
+          "$ref": "#/$defs/rôle"
+        }
+      },
+      "required": [
+        "position",
+        "rôle"
+      ]
+    },
+    "coordonnée": {
+      "description": "Valeur numérique autorisée",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 640
+    },
+    "liaison": {
+      "description": "Correspondance entre deux routes",
+      "type": "object",
+      "properties": {
+        "but": {
+          "type": "string"
+        },
+        "flux": {
+          "description": "Nombre de véhicules par minute",
+          "type": "integer",
+          "minimum": 1
+        },
+        "nid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "nid",
+        "but",
+        "flux"
+      ]
+    },
+    "niveau": {
+      "description": "Description complète d'un niveau",
+      "type": "object",
+      "properties": {
+        "nom": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "blocs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bloc"
+          }
+        },
+        "liaisons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/liaison"
+          },
+          "minItems": 1
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/route"
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "nom",
+        "version",
+        "routes",
+        "liaisons"
+      ]
+    },
+    "position": {
+      "description": "Coordonnées du plan",
+      "type": "object",
+      "properties": {
+        "largeur": {
+          "$ref": "#/$defs/coordonnée"
+        },
+        "hauteur": {
+          "$ref": "#/$defs/coordonnée"
+        }
+      },
+      "required": [
+        "largeur",
+        "hauteur"
+      ]
+    },
+    "rectangle": {
+      "description": "Parallélogramme aligné sur le repère",
+      "type": "object",
+      "properties": {
+        "inf": {
+          "$ref": "#/$defs/position"
+        },
+        "sup": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "required": [
+        "inf",
+        "sup"
+      ]
+    },
+    "rôle": {
+      "description": "Type de bloc",
+      "type": "string",
+      "pattern": "USINE|FORÊT|EAU"
+    },
+    "route": {
+      "description": "Point à relier",
+      "type": "object",
+      "properties": {
+        "nom": {
+          "type": "string"
+        },
+        "entrée": {
+          "$ref": "#/$defs/position"
+        },
+        "sortie": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "required": [
+        "nom"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "entrée"
+          ]
+        },
+        {
+          "required": [
+            "sortie"
+          ]
+        }
+      ]
+    },
+    "version": {
+      "description": "Format de fichier (grammaire associée)",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/niveau"
+    }
+  ]
+}

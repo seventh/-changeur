@@ -1,0 +1,6 @@
+= Échangeur
+
+== Invariants de l'interface graphique
+
+1. Lorsque le mouvement proposé pour l'élément sélectionné viole une règle
+de cohérence, la sélection de l'élément est perdue.

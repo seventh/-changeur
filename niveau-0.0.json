@@ -1,0 +1,28 @@
+{
+  "$schema": "file:///home/seventh/Git/Divers/Python/Échangeur/échangeur.schema.json",
+  "nom": "Premier niveau",
+  "version": "1",
+  "routes": [
+    {
+      "nom": "C1",
+      "sortie": {
+        "largeur": 200,
+        "hauteur": 100
+      }
+    },
+    {
+      "nom": "C2",
+      "entrée": {
+        "largeur": 310,
+        "hauteur": 460
+      }
+    }
+  ],
+  "liaisons": [
+    {
+      "nid": "C1",
+      "but": "C2",
+      "flux": 5
+    }
+  ]
+}
