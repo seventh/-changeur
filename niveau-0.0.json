@@ -2,6 +2,21 @@
   "$schema": "file:///home/seventh/Git/Divers/Python/Échangeur/échangeur.schema.json",
   "nom": "Premier niveau",
   "version": "1",
+  "obstacles": [
+    {
+      "rôle": "USINE",
+      "position": {
+        "inf": {
+          "largeur": 160,
+          "hauteur": 80
+        },
+        "sup": {
+          "largeur": 200,
+          "hauteur": 120
+        }
+      }
+    }
+  ],
   "routes": [
     {
       "nom": "C1",

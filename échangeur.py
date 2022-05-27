@@ -4,12 +4,15 @@
 """
 
 # Dépendance(s) standard(s)
+import dataclasses
+import enum
 import logging
 import math
 import random
 
 # Dépendance(s) interne(s)
 import format_1
+import graphe
 
 # Dépendance(s) externe(s)
 import pygame
@@ -48,141 +51,22 @@ class V2:
         return self.largeur * autre.hauteur - self.hauteur * autre.largeur
 
 
-class Item(dict):
-    def __init__(self, graphe, *, est_arête, **attributs):
-        super().__init__(attributs)
+class Biome(enum.IntEnum):
 
-        self.graphe = graphe
-        self.est_arête = est_arête
-        self.liaisons = list()
-
-    def __eq__(self, autre):
-        return id(self) == id(autre)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(0x{id(self):x})(est_arête={self.est_arête})"
-
-    # def __del__(self):
-    #     self.détacher(*self.liaisons)
-    #     if self.est_arête:
-    #         self.graphe.liens.remove(self)
-    #     else:
-    #         self.graphe.nœuds.remove(self)
-    #     self.graphe = None
-
-    def associer(self, *autres):
-        for a in autres:
-            self.liaisons.append(a)
-            a.liaisons.append(self)
-
-    def détacher(self, *autres):
-        for a in autres:
-            a.liaisons.remove(self)
-            self.liaisons.remove(a)
-
-    def est_similaire(self, autre):
-        retour = (self.est_arête == autre.est_arête
-                  and len(self.liaisons) == len(autre.liaisons))
-
-        i = 0
-        while retour and i < len(self.liaisons):
-            try:
-                autre.liaisons.index(self.liaisons[i])
-                i += 1
-            except ValueError:
-                retour = False
-
-        return retour
+    AUCUN = enum.auto()
+    ENTRÉE = enum.auto()
+    SORTIE = enum.auto()
+    FORÊT = enum.auto()
+    USINE = enum.auto()
+    FLEUVE = enum.auto()
 
 
-class Graphe:
-    def __init__(self):
-        # Sommets
-        self.nœuds = list()
-        # Arêtes
-        self.liens = list()
+@dataclasses.dataclass
+class Obstacle:
 
-    def __repr__(self):
-        lignes = list()
-        for i, n in enumerate(self.nœuds):
-            assert (not n.est_arête)
-            liens = list()
-            for l in n.liaisons:
-                assert (l.est_arête)
-                j = self.liens.index(l)
-                liens.append(f"L{j}")
-            liens.sort()
-            lignes.append(f"Nœud N{i} → {', '.join(liens)}")
-
-        for i, l in enumerate(self.liens):
-            assert (l.est_arête)
-            nœuds = list()
-            for n in l.liaisons:
-                assert (not n.est_arête)
-                j = self.nœuds.index(n)
-                nœuds.append(f"N{j}")
-            nœuds.sort()
-            lignes.append(f"Lien L{i} → {', '.join(nœuds)}")
-
-        return "\n".join(lignes)
-
-    def ajouter_nœud(self):
-        retour = Item(self, est_arête=False)
-        self.nœuds.append(retour)
-        return retour
-
-    def ajouter_lien(self):
-        retour = Item(self, est_arête=True)
-        self.liens.append(retour)
-        return retour
-
-    def fusionner_nœuds(self, nid, but):
-        # Remplacement de 'nid' par 'but' dans tous ses liens
-        for l in list(nid.liaisons):
-            if but not in l.liaisons:
-                l.associer(but)
-            l.détacher(nid)
-            if len(l.liaisons) < 2:
-                self.supprimer_lien(l)
-
-        # Suppression de l'ancien nœud
-        assert (len(nid.liaisons) == 0)
-        self.supprimer_nœud(nid)
-
-        # Suppression des relations identiques
-        recommencer = True
-        while recommencer:
-            recommencer = False
-            for i, l in enumerate(but.liaisons):
-                for k in but.liaisons[i + 1:]:
-                    if l.est_similaire(k):
-                        recommencer = True
-                        g.supprimer_lien(k)
-                        break
-                if recommencer:
-                    break
-
-    def iter_nœuds(self):
-        yield from self.nœuds
-
-    def iter_liens(self):
-        yield from self.liens
-
-    def supprimer_nœud(self, nœud):
-        """La suppression d'un nœud provoque la suppression de tous les liens
-        orphelins
-        """
-        liaisons = list(nœud.liaisons)
-        for l in liaisons:
-            g.supprimer_lien(l)
-        assert (len(nœud.liaisons) == 0)
-        self.nœuds.remove(nœud)
-        nœud.graphe = None
-
-    def supprimer_lien(self, lien):
-        lien.détacher(*lien.liaisons)
-        self.liens.remove(lien)
-        lien.graphe = None
+    coin_min: V2
+    coin_max: V2
+    biome: Biome
 
 
 PALIERS = 3
@@ -289,6 +173,46 @@ def carte_est_valide(graphe):
     return retour
 
 
+class Niveau:
+    def __init__(self):
+        self.graphe = graphe.Graphe()
+        self.obstacles = list()
+        self.flux = list()
+
+    def charger(self, nom_fichier):
+        val = format_1.Validateur(".")
+        données = format_1.charger(nom_fichier, "échangeur", val)
+        for r in données["routes"]:
+            couleur = couleur_aléatoire(0)
+            if "entrée" in r:
+                entrée = self.graphe.ajouter_nœud()
+                entrée["amovible"] = False
+                entrée["biome"] = Biome.ENTRÉE
+                entrée["couleur"] = couleur
+                entrée["position"] = V2(r["entrée"]["largeur"],
+                                        r["entrée"]["hauteur"])
+                entrée["palier"] = 0
+
+            if "sortie" in r:
+                sortie = self.graphe.ajouter_nœud()
+                sortie["amovible"] = False
+                sortie["biome"] = Biome.SORTIE
+                sortie["couleur"] = couleur
+                sortie["position"] = V2(r["sortie"]["largeur"],
+                                        r["sortie"]["hauteur"])
+                sortie["palier"] = 0
+
+        # Obstacles
+        for o in données["obstacles"]:
+            coin_min = V2(o["position"]["inf"]["largeur"],
+                          o["position"]["inf"]["hauteur"])
+            coin_max = V2(o["position"]["sup"]["largeur"],
+                          o["position"]["sup"]["hauteur"])
+            biome = Biome[o["rôle"]]
+            obstacle = Obstacle(coin_min, coin_max, biome)
+            self.obstacles.append(obstacle)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     random.seed(1977)
@@ -298,7 +222,7 @@ if __name__ == "__main__":
 
     noir = (0, 0, 0)
     # rouge = (255, 0, 0)
-    # vert = (0, 255, 0)
+    vert = (0, 255, 0)
     # bleu = (0, 0, 255)
     # jaune = (0, 255, 255)
 
@@ -306,26 +230,8 @@ if __name__ == "__main__":
     écran = pygame.display.set_mode(dimensions.en_tuple())
 
     # Chargement du niveau
-    val = format_1.Validateur(".")
-    niveau = format_1.charger("niveau-0.0.json", "échangeur", val)
-    g = Graphe()
-    for r in niveau["routes"]:
-        couleur = couleur_aléatoire(0)
-        if "entrée" in r:
-            entrée = g.ajouter_nœud()
-            entrée["amovible"] = False
-            entrée["couleur"] = couleur
-            entrée["position"] = V2(r["entrée"]["largeur"],
-                                    r["entrée"]["hauteur"])
-            entrée["palier"] = 0
-
-        if "sortie" in r:
-            sortie = g.ajouter_nœud()
-            sortie["amovible"] = False
-            sortie["couleur"] = couleur
-            sortie["position"] = V2(r["sortie"]["largeur"],
-                                    r["sortie"]["hauteur"])
-            sortie["palier"] = 0
+    NIVEAU = Niveau()
+    NIVEAU.charger("niveau-0.0.json")
 
     # Boucle d'interaction
     point = None  # Nœud sélectionné
@@ -334,11 +240,17 @@ if __name__ == "__main__":
         if modif:
             écran.fill(noir)
 
-            for l in sorted(g.iter_liens(), key=lambda l: l["palier"]):
+            for o in NIVEAU.obstacles:
+                pygame.draw.rect(écran, vert,
+                                 (o.coin_min.en_tuple(),
+                                  (o.coin_max - o.coin_min).en_tuple()))
+
+            for l in sorted(NIVEAU.graphe.iter_liens(),
+                            key=lambda l: l["palier"]):
                 pygame.draw.line(écran, l["couleur"],
                                  l.liaisons[0]["position"].en_tuple(),
                                  l.liaisons[1]["position"].en_tuple(), rayon)
-            for n in g.iter_nœuds():
+            for n in NIVEAU.graphe.iter_nœuds():
                 pygame.draw.circle(écran, n["couleur"],
                                    n["position"].en_tuple(), rayon)
 
@@ -354,27 +266,27 @@ if __name__ == "__main__":
         modif = False
         if évt.type == pygame.MOUSEBUTTONUP:
             if point is not None:
-                nœud, dn = nœud_proche(g, point["position"], point)
+                nœud, dn = nœud_proche(NIVEAU.graphe, point["position"], point)
                 if dn <= rayon:
                     logging.info("Fusion de deux nœuds")
                     logging.debug("*** Avant")
-                    logging.debug(g)
+                    logging.debug(NIVEAU.graphe)
                     if nœud["amovible"]:
-                        g.fusionner_nœuds(nœud, point)
+                        NIVEAU.graphe.fusionner_nœuds(nœud, point)
                     else:
-                        g.fusionner_nœuds(point, nœud)
+                        NIVEAU.graphe.fusionner_nœuds(point, nœud)
                     logging.debug("*** Après")
-                    logging.debug(g)
+                    logging.debug(NIVEAU.graphe)
                     modif = True
 
                 point = None
 
         elif évt.type == pygame.MOUSEBUTTONDOWN:
             logging.debug("*** Avant")
-            logging.debug(g)
+            logging.debug(NIVEAU.graphe)
             position = V2.de_tuple(évt.pos)
-            nœud, dn = nœud_proche(g, position)
-            lien, dl = lien_proche(g, position)
+            nœud, dn = nœud_proche(NIVEAU.graphe, position)
+            lien, dl = lien_proche(NIVEAU.graphe, position)
             if dn <= rayon:
                 if nœud["amovible"]:
                     logging.info("Sélection d'un nœud")
@@ -383,41 +295,42 @@ if __name__ == "__main__":
                         point = nœud
                     elif évt.button == 3:
                         # Bouton droit : suppression du nœud
-                        g.supprimer_nœud(nœud)
+                        NIVEAU.graphe.supprimer_nœud(nœud)
                         logging.debug("*** Après")
-                        logging.debug(g)
+                        logging.debug(NIVEAU.graphe)
                         modif = True
 
             elif dl <= rayon / 2:
                 logging.info("Sélection d'un lien")
                 if évt.button == 1:
                     # Bouton gauche : césure du segment
-                    point = g.ajouter_nœud()
+                    point = NIVEAU.graphe.ajouter_nœud()
                     point["position"] = position
                     point["couleur"] = lien["couleur"]
                     point["amovible"] = True
+                    point["biome"] = Biome.AUCUN
                     point["palier"] = lien["palier"]
-                    lg = g.ajouter_lien()
+                    lg = NIVEAU.graphe.ajouter_lien()
                     lg["couleur"] = lien["couleur"]
                     lg["palier"] = lien["palier"]
                     lg.associer(point, lien.liaisons[0])
-                    ld = g.ajouter_lien()
+                    ld = NIVEAU.graphe.ajouter_lien()
                     ld["couleur"] = lien["couleur"]
                     ld["palier"] = lien["palier"]
                     ld.associer(point, lien.liaisons[1])
-                    g.supprimer_lien(lien)
+                    NIVEAU.graphe.supprimer_lien(lien)
                     logging.debug("*** Après")
-                    logging.debug(g)
+                    logging.debug(NIVEAU.graphe)
                     modif = True
                 elif évt.button == 3:
                     # Bouton droit: suppression du lien
-                    g.supprimer_lien(lien)
+                    NIVEAU.graphe.supprimer_lien(lien)
                     modif = True
                 elif évt.button == 4:
                     # Molette haut → augmentation du palier
                     if lien["palier"] + 1 < PALIERS:
                         lien["palier"] += 1
-                        if not carte_est_valide(g):
+                        if not carte_est_valide(NIVEAU.graphe):
                             lien["palier"] -= 1
                         else:
                             lien["couleur"] = augmenter_intensité(
@@ -427,7 +340,7 @@ if __name__ == "__main__":
                     # Molette bas → diminution du palier
                     if lien["palier"] > 0:
                         lien["palier"] -= 1
-                        if not carte_est_valide(g):
+                        if not carte_est_valide(NIVEAU.graphe):
                             lien["palier"] += 1
                         else:
                             lien["couleur"] = diminuer_intensité(
@@ -437,22 +350,23 @@ if __name__ == "__main__":
             else:
                 logging.info("Ajout d'un nœud/lien")
                 # On ajoute un nouveau nœud…
-                point = g.ajouter_nœud()
+                point = NIVEAU.graphe.ajouter_nœud()
                 point["position"] = position
                 point["couleur"] = couleur_aléatoire(0)
                 point["amovible"] = True
+                point["biome"] = Biome.AUCUN
                 point["palier"] = 0
                 # …et éventuellement un nouveau lien
-                logging.debug(g)
+                logging.debug(NIVEAU.graphe)
                 if dn <= 10 * rayon:
                     point["couleur"] = nœud["couleur"]
                     point["palier"] = nœud["palier"]
-                    lien = g.ajouter_lien()
+                    lien = NIVEAU.graphe.ajouter_lien()
                     lien["couleur"] = nœud["couleur"]
                     lien["palier"] = nœud["palier"]
                     lien.associer(nœud, point)
                 logging.debug("*** Après")
-                logging.debug(g)
+                logging.debug(NIVEAU.graphe)
                 modif = True
 
             nœud = None
@@ -463,23 +377,24 @@ if __name__ == "__main__":
                 position = V2.de_tuple(évt.pos)
                 ancienne = point["position"]
                 point["position"] = position
-                if carte_est_valide(g):
+                if carte_est_valide(NIVEAU.graphe):
                     modif = True
                 else:
                     point["position"] = ancienne
                     # La sélection du nœud est perdue : reprise de l'action
                     # 'pygame.MOUSEBUTTONUP'
-                    nœud, dn = nœud_proche(g, point["position"], point)
+                    nœud, dn = nœud_proche(NIVEAU.graphe, point["position"],
+                                           point)
                     if dn <= rayon:
                         logging.info("Fusion de deux nœuds")
                         logging.debug("*** Avant")
-                        logging.debug(g)
+                        logging.debug(NIVEAU.graphe)
                         if nœud["amovible"]:
-                            g.fusionner_nœuds(nœud, point)
+                            NIVEAU.graphe.fusionner_nœuds(nœud, point)
                         else:
-                            g.fusionner_nœuds(point, nœud)
+                            NIVEAU.graphe.fusionner_nœuds(point, nœud)
                         logging.debug("*** Après")
-                        logging.debug(g)
+                        logging.debug(NIVEAU.graphe)
                         modif = True
 
                     point = None
