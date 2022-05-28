@@ -25,6 +25,12 @@ class V2:
         self.largeur = largeur
         self.hauteur = hauteur
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(0x{id(self):x}(largeur={self.largeur}, hauteur={self.hauteur})"
+
+    def __str__(self):
+        return f"({self.largeur}, {self.hauteur})"
+
     def __neg__(self):
         return V2(-self.largeur, -self.hauteur)
 
@@ -67,6 +73,20 @@ class Obstacle:
     coin_min: V2
     coin_max: V2
     biome: Biome
+
+    def intersection(self, nid, but):
+        retour = False
+        v = but - nid
+        vl = V2(self.coin_max.largeur - self.coin_min.largeur, 0)
+        vh = V2(0, self.coin_max.hauteur - self.coin_min.hauteur)
+
+        if (intersection(nid, v, self.coin_min, vl)
+                or intersection(nid, v, self.coin_min, vh)
+                or intersection(nid, v, self.coin_max, -vl)
+                or intersection(nid, v, self.coin_max, -vh)):
+            retour = True
+
+        return retour
 
 
 PALIERS = 3
@@ -173,6 +193,33 @@ def carte_est_valide(graphe):
     return retour
 
 
+def intersection(nid1, v1, nid2, v2):
+    """Y a-t-il une intersection entre les deux segments ?
+    """
+    retour = False
+    écart = nid2 - nid1
+    # Équation à vérifier (en deux dimensions) :
+    # v1 * t1 - v2 * t2 = nid2 - nid1
+    # avec t1 ∈ [0, 1] et t2 ∈ [0, 1]
+    dét = v1.hauteur * v2.largeur - v1.largeur * v2.hauteur
+    if dét != 0:
+        t1 = (v2.largeur * écart.hauteur - v2.hauteur * écart.largeur) / dét
+        t2 = (v1.largeur * écart.hauteur - v1.hauteur * écart.largeur) / dét
+        logging.debug(f"{t1} et {t2}")
+        if 0 <= t1 <= 1 and 0 <= t2 <= 1:
+            retour = True
+    else:
+        # Soit les points sont colinéaires, soit les segments sont parallèles
+        # Équation à vérifier :
+        # v1 * t = nid2 - nid1
+        cos = abs(v1.scalaire(écart)) / math.sqrt(v1.norme2() * écart.norme2())
+        if cos - 1 >= -1e-7:
+            logging.debug("Aïe !")
+            retour = True
+
+    return retour
+
+
 class Niveau:
     def __init__(self):
         self.graphe = graphe.Graphe()
@@ -212,6 +259,64 @@ class Niveau:
             obstacle = Obstacle(coin_min, coin_max, biome)
             self.obstacles.append(obstacle)
 
+    def est_dans_un_obstacle(self, position):
+        """Vrai ssi la position est occupée par un des obstacles du niveau
+        """
+        logging.debug(position)
+        retour = False
+        for o in self.obstacles:
+            if (o.coin_min.largeur <= position.largeur <= o.coin_max.largeur
+                    and o.coin_min.hauteur <= position.hauteur <=
+                    o.coin_max.hauteur):
+                retour = True
+                break
+        return retour
+
+    def valider_mouvement(self, sommet, position):
+        """Le mouvement du sommet à la position donnée est autorisé si:
+
+        - il ne se retrouve pas en collision avec un obstacle
+        - aucun des tronçons auquel il est lié n'entre en collision avec un
+        obstacle
+        - aucun des tronçons auquel il est lié n'intersecte un tronçon de même
+        palier
+        """
+        retour = True
+        if self.est_dans_un_obstacle(position):
+            retour = False
+        else:
+            ancienne = sommet["position"]
+            sommet["position"] = position
+            for lien in sommet.liaisons:
+                nid1 = lien.liaisons[0]["position"]
+                v1 = lien.liaisons[1]["position"] - lien.liaisons[0]["position"]
+                # ÀDU : On vérifie la collision avec un obstacle
+                for o in self.obstacles:
+                    if o.intersection(lien.liaisons[0]["position"],
+                                      lien.liaisons[1]["position"]):
+                        logging.debug(f"Intersection avec {o} !")
+                        retour = False
+                        break
+                if not retour:
+                    break
+
+                # On vérifie l'intersection avec un autre lien de même palier
+                for autre in self.graphe.liens:
+                    # On ne regarde que les liens qui n'ont pas de nœud commun
+                    if (lien["palier"] == autre["palier"]
+                            and len(nœuds_communs(lien, autre)) == 0):
+                        nid2 = autre.liaisons[0]["position"]
+                        v2 = autre.liaisons[1]["position"] - \
+                            autre.liaisons[0]["position"]
+                        if intersection(nid1, v1, nid2, v2):
+                            retour = False
+                            break
+                if not retour:
+                    break
+            sommet["position"] = ancienne
+
+        return retour
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -240,19 +345,21 @@ if __name__ == "__main__":
         if modif:
             écran.fill(noir)
 
-            for o in NIVEAU.obstacles:
-                pygame.draw.rect(écran, vert,
-                                 (o.coin_min.en_tuple(),
-                                  (o.coin_max - o.coin_min).en_tuple()))
-
+            # Liaisons
             for l in sorted(NIVEAU.graphe.iter_liens(),
                             key=lambda l: l["palier"]):
                 pygame.draw.line(écran, l["couleur"],
                                  l.liaisons[0]["position"].en_tuple(),
                                  l.liaisons[1]["position"].en_tuple(), rayon)
+            # Sommets
             for n in NIVEAU.graphe.iter_nœuds():
                 pygame.draw.circle(écran, n["couleur"],
                                    n["position"].en_tuple(), rayon)
+            # Obstacles
+            for o in NIVEAU.obstacles:
+                pygame.draw.rect(écran, vert,
+                                 (o.coin_min.en_tuple(),
+                                  (o.coin_max - o.coin_min).en_tuple()))
 
             pygame.display.flip()
 
@@ -348,26 +455,29 @@ if __name__ == "__main__":
                             modif = True
 
             else:
-                logging.info("Ajout d'un nœud/lien")
-                # On ajoute un nouveau nœud…
-                point = NIVEAU.graphe.ajouter_nœud()
-                point["position"] = position
-                point["couleur"] = couleur_aléatoire(0)
-                point["amovible"] = True
-                point["biome"] = Biome.AUCUN
-                point["palier"] = 0
-                # …et éventuellement un nouveau lien
-                logging.debug(NIVEAU.graphe)
-                if dn <= 10 * rayon:
-                    point["couleur"] = nœud["couleur"]
-                    point["palier"] = nœud["palier"]
-                    lien = NIVEAU.graphe.ajouter_lien()
-                    lien["couleur"] = nœud["couleur"]
-                    lien["palier"] = nœud["palier"]
-                    lien.associer(nœud, point)
-                logging.debug("*** Après")
-                logging.debug(NIVEAU.graphe)
-                modif = True
+                if NIVEAU.est_dans_un_obstacle(position):
+                    logging.debug("Intersection avec un obstacle")
+                else:
+                    logging.info("Ajout d'un nœud/lien")
+                    # On ajoute un nouveau nœud…
+                    point = NIVEAU.graphe.ajouter_nœud()
+                    point["position"] = position
+                    point["couleur"] = couleur_aléatoire(0)
+                    point["amovible"] = True
+                    point["biome"] = Biome.AUCUN
+                    point["palier"] = 0
+                    # …et éventuellement un nouveau lien
+                    logging.debug(NIVEAU.graphe)
+                    if dn <= 10 * rayon:
+                        point["couleur"] = nœud["couleur"]
+                        point["palier"] = nœud["palier"]
+                        lien = NIVEAU.graphe.ajouter_lien()
+                        lien["couleur"] = nœud["couleur"]
+                        lien["palier"] = nœud["palier"]
+                        lien.associer(nœud, point)
+                    logging.debug("*** Après")
+                    logging.debug(NIVEAU.graphe)
+                    modif = True
 
             nœud = None
             lien = None
@@ -375,12 +485,10 @@ if __name__ == "__main__":
         elif évt.type == pygame.MOUSEMOTION:
             if point is not None:
                 position = V2.de_tuple(évt.pos)
-                ancienne = point["position"]
-                point["position"] = position
-                if carte_est_valide(NIVEAU.graphe):
+                if NIVEAU.valider_mouvement(point, position):
+                    point["position"] = position
                     modif = True
                 else:
-                    point["position"] = ancienne
                     # La sélection du nœud est perdue : reprise de l'action
                     # 'pygame.MOUSEBUTTONUP'
                     nœud, dn = nœud_proche(NIVEAU.graphe, point["position"],
