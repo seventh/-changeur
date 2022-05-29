@@ -1,0 +1,113 @@
+{
+  "$schema": "file:///home/seventh/Git/Divers/Python/Échangeur/échangeur.schema.json",
+  "version": "1",
+  "nom": "Croisement standard",
+  "routes": [
+    {
+      "nom": "17 nord",
+      "sortie": {
+        "largeur": 310,
+        "hauteur": 10
+      },
+      "entrée": {
+        "largeur": 330,
+        "hauteur": 10
+      }
+    },
+    {
+      "nom": "101 est",
+      "sortie": {
+        "largeur": 630,
+        "hauteur": 230
+      },
+      "entrée": {
+        "largeur": 630,
+        "hauteur": 250
+      }
+    },
+    {
+      "nom": "17 sud",
+      "sortie": {
+        "largeur": 330,
+        "hauteur": 470
+      },
+      "entrée": {
+        "largeur": 310,
+        "hauteur": 470
+      }
+    },
+    {
+      "nom": "101 ouest",
+      "sortie": {
+        "largeur": 10,
+        "hauteur": 250
+      },
+      "entrée": {
+        "largeur": 10,
+        "hauteur": 230
+      }
+    }
+  ],
+  "liaisons": [
+    {
+      "nid": "17 nord",
+      "but": "17 sud",
+      "flux": 10
+    },
+    {
+      "nid": "17 nord",
+      "but": "101 ouest",
+      "flux": 10
+    },
+    {
+      "nid": "17 nord",
+      "but": "101 est",
+      "flux": 10
+    },
+    {
+      "nid": "17 sud",
+      "but": "17 nord",
+      "flux": 10
+    },
+    {
+      "nid": "17 sud",
+      "but": "101 ouest",
+      "flux": 10
+    },
+    {
+      "nid": "17 sud",
+      "but": "101 est",
+      "flux": 10
+    },
+    {
+      "nid": "101 ouest",
+      "but": "17 sud",
+      "flux": 10
+    },
+    {
+      "nid": "101 ouest",
+      "but": "17 nord",
+      "flux": 10
+    },
+    {
+      "nid": "101 ouest",
+      "but": "101 est",
+      "flux": 10
+    },
+    {
+      "nid": "101 est",
+      "but": "17 sud",
+      "flux": 10
+    },
+    {
+      "nid": "101 est",
+      "but": "101 ouest",
+      "flux": 10
+    },
+    {
+      "nid": "101 est",
+      "but": "17 nord",
+      "flux": 10
+    }
+  ]
+}

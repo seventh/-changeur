@@ -89,6 +89,14 @@ class Obstacle:
         return retour
 
 
+@dataclasses.dataclass
+class Liaison:
+
+    nid: object
+    but: object
+    débit: int
+
+
 PALIERS = 3
 
 
@@ -229,6 +237,7 @@ class Niveau:
     def charger(self, nom_fichier):
         val = format_1.Validateur(".")
         données = format_1.charger(nom_fichier, "échangeur", val)
+        points = dict()
         for r in données["routes"]:
             couleur = couleur_aléatoire(0)
             if "entrée" in r:
@@ -239,6 +248,7 @@ class Niveau:
                 entrée["position"] = V2(r["entrée"]["largeur"],
                                         r["entrée"]["hauteur"])
                 entrée["palier"] = 0
+                points[f"but/{r['nom']}"] = entrée
 
             if "sortie" in r:
                 sortie = self.graphe.ajouter_nœud()
@@ -248,16 +258,26 @@ class Niveau:
                 sortie["position"] = V2(r["sortie"]["largeur"],
                                         r["sortie"]["hauteur"])
                 sortie["palier"] = 0
+                points[f"nid/{r['nom']}"] = sortie
 
         # Obstacles
-        for o in données["obstacles"]:
-            coin_min = V2(o["position"]["inf"]["largeur"],
-                          o["position"]["inf"]["hauteur"])
-            coin_max = V2(o["position"]["sup"]["largeur"],
-                          o["position"]["sup"]["hauteur"])
-            biome = Biome[o["rôle"]]
-            obstacle = Obstacle(coin_min, coin_max, biome)
-            self.obstacles.append(obstacle)
+        if "obstacles" in données:
+            for o in données["obstacles"]:
+                coin_min = V2(o["position"]["inf"]["largeur"],
+                              o["position"]["inf"]["hauteur"])
+                coin_max = V2(o["position"]["sup"]["largeur"],
+                              o["position"]["sup"]["hauteur"])
+                biome = Biome[o["rôle"]]
+                obstacle = Obstacle(coin_min, coin_max, biome)
+                self.obstacles.append(obstacle)
+
+        # Objectifs de connexion
+        for l in données["liaisons"]:
+            clef = f"nid/{l['nid']}"
+            nid = points[clef]
+            clef = f"but/{l['but']}"
+            but = points[clef]
+            self.flux.append(Liaison(nid, but, l["flux"]))
 
     def est_dans_un_obstacle(self, position):
         """Vrai ssi la position est occupée par un des obstacles du niveau
@@ -317,6 +337,40 @@ class Niveau:
 
         return retour
 
+    def est_complet(self):
+        """Vrai ssi toutes les liaisons objectives sont effectives
+        """
+        retour = True
+        for l in self.flux:
+            if not self.sont_connectés(l.nid, l.but):
+                retour = False
+                break
+        return retour
+
+    def sont_connectés(self, nid, but):
+        """Vrai ssi un chemin existe entre les deux sommets
+        """
+        trouvé = False
+        atteints = [nid]
+        nouveaux = [nid]
+        while not (trouvé or len(nouveaux) == 0):
+            muchmuch = list()
+            for s in nouveaux:
+                for l in s.liaisons:
+                    for autre in l.liaisons:
+                        if autre is but:
+                            trouvé = True
+                            break
+                        elif autre not in atteints:
+                            muchmuch.append(autre)
+                            atteints.append(autre)
+                    if trouvé:
+                        break
+                if trouvé:
+                    break
+            nouveaux = muchmuch
+        return trouvé
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -336,7 +390,7 @@ if __name__ == "__main__":
 
     # Chargement du niveau
     NIVEAU = Niveau()
-    NIVEAU.charger("niveau-0.0.json")
+    NIVEAU.charger("niveau-1.0.json")
 
     # Boucle d'interaction
     point = None  # Nœud sélectionné
@@ -364,6 +418,9 @@ if __name__ == "__main__":
             pygame.display.flip()
 
             modif = False
+
+        if NIVEAU.est_complet():
+            logging.info("Bravo !")
 
         évt = pygame.event.wait()
         # print(évt)
